@@ -27,8 +27,9 @@ class ViCareConfig:
     # Hybrid retrieval (BM25 + Dense RRF)
     use_hybrid_bm25: bool = False
     rrf_k: int = 60
-    dense_weight: float = 0.75
-    bm25_weight: float = 0.25
+    dense_weight: float = 0.65
+    bm25_weight: float = 0.35
+    hnsw_ef_search: int = 100
     # EmbeddingGemma 2 specific controls
     query_prompt_name: str = "QuestionAnswering"
     document_prompt_name: str = "Document"
@@ -56,6 +57,7 @@ BASELINE_CONFIG = ViCareConfig(
     min_score=0.86,
     llm_model="qwen2.5:3b",
     use_hybrid_bm25=False,
+    hnsw_ef_search=100,
     enforce_citations=False,
     allow_citation_repair=False,
     use_upgraded_guardrails=False,
@@ -75,8 +77,9 @@ EMBEDDINGGEMMA2_CONFIG = ViCareConfig(
     llm_model="qwen2.5:3b",
     use_hybrid_bm25=True,
     rrf_k=60,
-    dense_weight=0.75,
-    bm25_weight=0.25,
+    dense_weight=0.65,
+    bm25_weight=0.35,
+    hnsw_ef_search=200,
     query_prompt_name="QuestionAnswering",
     document_prompt_name="Document",
     truncate_dim=None,

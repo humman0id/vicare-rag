@@ -30,7 +30,7 @@ def compute_index_signature(config: ViCareConfig, data: list[dict[str, Any]]) ->
     header = (
         f"{config.embedding_model}|{config.embedding_backend}|"
         f"{config.document_prompt_name}|{config.truncate_dim}|"
-        f"{config.chunk_size}|{config.overlap}|l2|"
+        f"{config.chunk_size}|{config.overlap}|l2|ef{config.hnsw_ef_search}|"
     )
     hasher.update(header.encode("utf-8"))
     for item in data:
@@ -131,7 +131,13 @@ class ViCareRetriever:
         self.client = chromadb.PersistentClient(path=config.chroma_path)
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
-            configuration={"hnsw": {"space": "l2"}},
+            configuration={
+                "hnsw": {
+                    "space": "l2",
+                    "ef_search": config.hnsw_ef_search,
+                    "ef_construction": max(100, config.hnsw_ef_search),
+                }
+            },
         )
 
         existing_ids = set(self.collection.get(include=[])["ids"])
