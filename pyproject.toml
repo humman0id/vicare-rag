@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vicare-rag"
+version = "0.1.0"
+description = "ViCare — Improved Vietnamese Health Q&A RAG Assistant (AI4LIFE x Rikkei AI Challenge 24h)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "chromadb>=1.0,<2",
+    "sentence-transformers>=6.1,<7",
+    "transformers>=5.18,<6",
+    "torchvision",
+    "datasets>=3,<5",
+    "ollama>=0.5,<1",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "gradio>=5,<7",
+    "pydantic>=2,<3",
+    "requests>=2.31,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "httpx>=0.27,<1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
