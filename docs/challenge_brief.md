@@ -41,7 +41,8 @@ Build and improve **ViCare**, a Vietnamese health information Q&A assistant usin
 3. **Calibrated Refusal Threshold & Out-of-Scope Evaluation**
    - Because cosine score distributions differ sharply between `multilingual-e5-small` and `embeddinggemma-2`, calibrate `MIN_SCORE` per model using in-scope `dev` scores vs an expanded out-of-scope probe set (maximizing F1 / Youden's J) rather than blindly reusing `0.86`.
 4. **Upgraded Vietnamese Emergency Guardrails**
-   - Expanded red-flag symptom lexicon (cardiac, neurological/stroke, severe bleeding, respiratory distress, anaphylaxis, acute self-harm/crisis, severe pediatric fever) with diacritic-insensitive matching and negation checks (avoiding false positives on phrases like *"không đau ngực"*).
+   - Expanded red-flag symptom lexicon (cardiac, neurological/stroke, severe bleeding, respiratory distress, anaphylaxis, acute self-harm/crisis) with diacritic-insensitive matching and clause-bounded negation checks (avoiding false positives on phrases like *"không đau ngực"* or *"chưa từng bị ngất hay co giật"* while preserving contrastive emergencies like *"không đau ngực nhưng bị khó thở"*).
+   - **Explicit limitation:** Like the official baseline's 8 hardcoded `EMERGENCY_WORDS`, this remains a rule/lexicon-based layer rather than a clinical classifier — paraphrased or rare emergencies outside the lexicon can still be missed, and semantic/classifier triage is noted as future work.
 5. **Production Packaging & Demo**
    - Modular `src/vicare/` package, FastAPI server (`vicare.api`), Gradio chat UI (`vicare.ui`), automated unit tests, and self-contained free Colab T4 submission notebook synced with Google Drive.
 
