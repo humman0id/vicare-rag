@@ -184,9 +184,34 @@ class CitationAudit:
     cleaned_text: str
 
 
-def verify_and_clean_citations(text: str, num_sources: int) -> CitationAudit:
-    """Parse, validate, and clean inline [k] citations against 1..num_sources.
+# Matches verbose Vietnamese prose citation wrappers produced by small LLMs,
+# e.g. "(trích dẫn [1] và [2])", "(tài liệu 1)", "(nguồn [2])", "[tài liệu 1]".
+_PROSE_CITE_PAREN_RE = re.compile(
+    r"\(\s*(?:trích\s+dẫn|tài\s+liệu(?:\s+tham\s+khảo)?|nguồn)\s*[:\s]*(\[?\d+\]?(?:\s*(?:,|và|&)\s*\[?\d+\]?)*)\s*\)",
+    flags=re.IGNORECASE,
+)
+_PROSE_CITE_BRACKET_RE = re.compile(
+    r"\[\s*(?:tài\s+liệu|nguồn)\s*[:\s]*(\d+(?:\s*,\s*\d+)*)\s*\]",
+    flags=re.IGNORECASE,
+)
 
+
+def normalize_vietnamese_citations(text: str) -> str:
+    """Convert common Vietnamese prose citation phrasing into compact [n] tags."""
+
+    def _to_brackets(match: re.Match[str]) -> str:
+        nums = re.findall(r"\d+", match.group(1))
+        return "".join(f"[{n}]" for n in nums)
+
+    normalized = _PROSE_CITE_PAREN_RE.sub(_to_brackets, str(text or ""))
+    normalized = _PROSE_CITE_BRACKET_RE.sub(_to_brackets, normalized)
+    return normalized
+
+
+def verify_and_clean_citations(text: str, num_sources: int) -> CitationAudit:
+    """Parse, normalize, validate, and clean inline [k] citations against 1..num_sources.
+
+    - Normalizes verbose Vietnamese citations like `(trích dẫn [1] và [2])` or `(tài liệu 1)`.
     - Supports single tags (`[1]`) and comma-grouped tags (`[1, 2]`).
     - Strips any out-of-range citation numbers (e.g., `[7]` when only 5 sources exist).
     - Computes citation precision = valid_mentions / total_mentions.
@@ -208,7 +233,8 @@ def verify_and_clean_citations(text: str, num_sources: int) -> CitationAudit:
             return ""
         return "".join(f"[{n}]" for n in kept)
 
-    cleaned = _CITATION_GROUP_RE.sub(_replace_group, str(text or ""))
+    normalized = normalize_vietnamese_citations(text)
+    cleaned = _CITATION_GROUP_RE.sub(_replace_group, normalized)
     # Tidy double spaces left after stripping an invalid citation.
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned).strip()

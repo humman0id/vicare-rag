@@ -12,15 +12,28 @@ from sentence_transformers import SentenceTransformer
 from vicare.config import ViCareConfig
 
 
+def has_native_bf16() -> bool:
+    """Return True only when GPU has native hardware BF16 tensor cores (Ampere SM 8.0+).
+
+    Newer PyTorch returns torch.cuda.is_bf16_supported() == True via software
+    emulation on Turing GPUs such as Tesla T4 (SM 7.5), which is ~3-5x slower
+    than native float32 for EmbeddingGemma 2 encoding.
+    """
+    if not torch.cuda.is_available():
+        return False
+    major, _ = torch.cuda.get_device_capability(0)
+    return major >= 8 and torch.cuda.is_bf16_supported()
+
+
 def select_safe_dtype(embedding_backend: str) -> torch.dtype:
-    """Select a numerically safe dtype for the target embedding backend.
+    """Select a numerically safe and fast dtype for the target embedding backend.
 
     EmbeddingGemma 2 activations exceed float16 dynamic range and silently produce
-    NaNs or degraded vectors in float16. Always use bfloat16 on bf16-capable GPUs
-    (e.g., L4/A100) and float32 elsewhere (free Colab T4, CPU).
+    NaNs or degraded vectors in float16. Always use bfloat16 on native BF16 GPUs
+    (Ampere/Ada/Hopper: L4, A100) and float32 elsewhere (free Colab T4, CPU).
     """
     if embedding_backend == "embeddinggemma2":
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        if has_native_bf16():
             return torch.bfloat16
         return torch.float32
     return torch.float32

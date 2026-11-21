@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from vicare.guardrails import (
     DEFAULT_OUT_OF_SCOPE_PROBES,
     REFUSAL,
@@ -16,6 +18,7 @@ from vicare.guardrails import (
 from vicare.rag import ChatFn, ViCareRAG, default_ollama_chat
 
 K_VALUES = (1, 3, 5, 10)
+MRL_DIMS = (768, 512, 256, 128)
 
 JUDGE_PROMPT = """Bạn là giám khảo đối chiếu câu trả lời với đáp án tham khảo.
 CÂU HỎI: {q}
@@ -68,16 +71,17 @@ def evaluate_threshold_calibration(
     oos_questions: tuple[str, ...] = DEFAULT_OUT_OF_SCOPE_PROBES,
     n_in_scope: int = 30,
 ) -> dict[str, Any]:
-    """Measure in-scope vs out-of-scope top-1 similarity distributions and calibrate MIN_SCORE."""
+    """Measure in-scope vs out-of-scope max dense similarity distributions and calibrate MIN_SCORE."""
+    top_k = getattr(getattr(retriever, "config", None), "top_k", 5)
     in_scores = [
-        hits[0]["score"]
+        max(float(h["score"]) for h in hits)
         for q in dev_questions[:n_in_scope]
-        if (hits := retriever.retrieve(q["question"], k=1))
+        if (hits := retriever.retrieve(q["question"], k=top_k))
     ]
     oos_scores = [
-        hits[0]["score"]
+        max(float(h["score"]) for h in hits)
         for q in oos_questions
-        if (hits := retriever.retrieve(q, k=1))
+        if (hits := retriever.retrieve(q, k=top_k))
     ]
     return calibrate_min_score(in_scores, oos_scores)
 
@@ -223,6 +227,94 @@ def format_comparison_table(
                     i_judge["citation_compliance_rate"],
                 )
             )
+    return "\n".join(lines)
+
+
+def evaluate_matryoshka_ablation(
+    doc_embeddings: np.ndarray,
+    doc_ids: list[str],
+    query_embeddings: np.ndarray,
+    questions: list[dict[str, Any]],
+    dims: tuple[int, ...] = MRL_DIMS,
+    k_values: tuple[int, ...] = K_VALUES,
+) -> list[dict[str, Any]]:
+    """Evaluate Matryoshka (MRL) vector truncation without re-encoding.
+
+    Slices full-dimensional embeddings to each target dimension, re-normalizes to unit
+    L2 length (required by EmbeddingGemma 2), deduplicates per doc_id, and computes
+    exact Recall@K, MRR@maxK, and raw float32 vector storage in MB.
+    """
+    full_dim = int(doc_embeddings.shape[1])
+    n_chunks = int(doc_embeddings.shape[0])
+    n_queries = len(questions)
+    max_k = max(k_values)
+    candidate_pool = min(n_chunks, max(max_k * 8, 60))
+
+    results: list[dict[str, Any]] = []
+    for dim in dims:
+        if dim > full_dim:
+            continue
+        t0 = time.perf_counter()
+        d_slice = doc_embeddings[:, :dim].astype(np.float32, copy=False)
+        q_slice = query_embeddings[:, :dim].astype(np.float32, copy=False)
+        d_norm = d_slice / np.clip(np.linalg.norm(d_slice, axis=1, keepdims=True), 1e-12, None)
+        q_norm = q_slice / np.clip(np.linalg.norm(q_slice, axis=1, keepdims=True), 1e-12, None)
+
+        sim_matrix = q_norm @ d_norm.T
+
+        correct = {k: 0 for k in k_values}
+        mrr_sum = 0.0
+        for qi, q in enumerate(questions):
+            row = sim_matrix[qi]
+            top_idx = np.argpartition(row, -candidate_pool)[-candidate_pool:]
+            top_idx = top_idx[np.argsort(row[top_idx])[::-1]]
+
+            found_ids: list[str] = []
+            seen: set[str] = set()
+            for idx in top_idx:
+                did = doc_ids[int(idx)]
+                if did in seen:
+                    continue
+                seen.add(did)
+                found_ids.append(did)
+                if len(found_ids) >= max_k:
+                    break
+
+            gold_ids = set(q["gold_doc_ids"])
+            for k in k_values:
+                correct[k] += int(bool(gold_ids & set(found_ids[:k])))
+            for rank, did in enumerate(found_ids, 1):
+                if did in gold_ids:
+                    mrr_sum += 1.0 / rank
+                    break
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        entry: dict[str, Any] = {
+            "dim": dim,
+            "compression": f"{full_dim / dim:.1f}x",
+            "vector_ram_mb": round((n_chunks * dim * 4) / (1024 * 1024), 2),
+            "search_ms_total": round(elapsed_ms, 1),
+        }
+        for k in k_values:
+            entry[f"recall@{k}"] = correct[k] / n_queries
+        entry[f"mrr@{max_k}"] = mrr_sum / n_queries
+        results.append(entry)
+    return results
+
+
+def format_matryoshka_table(rows: list[dict[str, Any]]) -> str:
+    """Format MRL truncation ablation results into a compact comparison table."""
+    lines = [
+        "BẢNG THỰC NGHIỆM MATRYOSHKA (MRL TRUNCATION — DENSE-ONLY, KHÔNG CẦN ENCODE LẠI)",
+        f"{'Dim':<6} {'Nén':>6} {'RAM Vector':>12} {'R@1':>8} {'R@3':>8} {'R@5':>8} {'R@10':>8} {'MRR@10':>8}",
+        "-" * 72,
+    ]
+    for r in rows:
+        lines.append(
+            f"{r['dim']:<6} {r['compression']:>6} {r['vector_ram_mb']:>9.2f} MB "
+            f"{r['recall@1']:>7.1%} {r['recall@3']:>7.1%} "
+            f"{r['recall@5']:>7.1%} {r['recall@10']:>7.1%} {r['mrr@10']:>7.1%}"
+        )
     return "\n".join(lines)
 
 

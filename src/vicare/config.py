@@ -1,4 +1,4 @@
-"""Configuration profiles for baseline and upgraded ViCare RAG pipelines."""
+"""Configuration profiles for baseline and upgraded (V2) ViCare RAG pipelines."""
 
 from __future__ import annotations
 
@@ -22,7 +22,13 @@ class ViCareConfig:
     min_score: float = 0.86
     llm_model: str = "qwen2.5:3b"
     ollama_url: str = "http://127.0.0.1:11434"
+    ollama_seed: int = 42
     chroma_path: str = "chroma_db"
+    # Hybrid retrieval (BM25 + Dense RRF)
+    use_hybrid_bm25: bool = False
+    rrf_k: int = 60
+    dense_weight: float = 0.65
+    bm25_weight: float = 0.35
     # EmbeddingGemma 2 specific controls
     query_prompt_name: str = "QuestionAnswering"
     document_prompt_name: str = "Document"
@@ -49,6 +55,7 @@ BASELINE_CONFIG = ViCareConfig(
     top_k=5,
     min_score=0.86,
     llm_model="qwen2.5:3b",
+    use_hybrid_bm25=False,
     enforce_citations=False,
     allow_citation_repair=False,
     use_upgraded_guardrails=False,
@@ -56,7 +63,7 @@ BASELINE_CONFIG = ViCareConfig(
 )
 
 EMBEDDINGGEMMA2_CONFIG = ViCareConfig(
-    profile_name="improved_embeddinggemma2",
+    profile_name="improved_v2_embeddinggemma2_hybrid",
     embedding_model="google/embeddinggemma-2",
     embedding_backend="embeddinggemma2",
     chunk_size=200,
@@ -64,8 +71,12 @@ EMBEDDINGGEMMA2_CONFIG = ViCareConfig(
     n_chunks=None,
     top_k=5,
     # Cosine similarity scale differs from E5; calibrate on dev vs OOS probes before final runs.
-    min_score=0.55,
+    min_score=0.67,
     llm_model="qwen2.5:3b",
+    use_hybrid_bm25=True,
+    rrf_k=60,
+    dense_weight=0.65,
+    bm25_weight=0.35,
     query_prompt_name="QuestionAnswering",
     document_prompt_name="Document",
     truncate_dim=None,
