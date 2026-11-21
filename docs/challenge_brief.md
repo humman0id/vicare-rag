@@ -32,9 +32,9 @@ Build and improve **ViCare**, a Vietnamese health information Q&A assistant usin
 
 1. **Embedding Upgrade (`google/embeddinggemma-2`) + Baseline Side-by-Side Comparison**
    - Load text-only backbone via selective encoder loading (`config_kwargs={"vision_config": None, "audio_config": None}` -> 270M active params instead of full 740M multimodal).
-   - Enforce `bfloat16` on bf16-capable GPUs (Colab Pro L4/A100) and `float32` on CPU/T4 (never `float16`, which overflows activations in EmbeddingGemma 2).
+   - Enforce `float32` on free Google Colab **T4 GPU** / CPU (since T4 lacks native BF16 and EmbeddingGemma 2 overflows `float16`) and automatically use `bfloat16` on L4/A100 if available. Explicitly unload `multilingual-e5-small` from VRAM after the baseline run so T4's 15 GB VRAM stays clean for EmbeddingGemma 2 + Ollama `qwen2.5:3b`.
    - Use asymmetric task prefixes: `prompt_name="QuestionAnswering"` (and optionally ablate `"SearchQuery"`) for queries, `prompt_name="Document"` for passages.
-   - Benchmark against the original `intfloat/multilingual-e5-small` on the exact same 100-question `dev` split and report honest trade-offs: Recall@1/3/5/10, MRR@10, indexing time, query latency, memory/VRAM footprint, vector dimension (768d vs 384d, plus optional MRL 256d/512d check), and hardware/dependency caveats (`bfloat16`/`float32` precision requirement, `sentence-transformers>=6.1` + `transformers>=5.18`, and `torchvision` required by `AutoProcessor` even in text-only mode).
+   - Benchmark against the original `intfloat/multilingual-e5-small` on the exact same 100-question `dev` split and report honest trade-offs: Recall@1/3/5/10, MRR@10, indexing time, query latency, memory/VRAM footprint, vector dimension (768d vs 384d, plus optional MRL 256d/512d check), and hardware/dependency caveats (`bfloat16`/`float32` precision requirement — running `float32` on free T4, `sentence-transformers>=6.1` + `transformers>=5.18`, and `torchvision` required by `AutoProcessor` even in text-only mode).
 2. **Improved Prompting & Strict `[k]` Citation Enforcement**
    - Refined Vietnamese system prompt separating retrieved evidence from instructions and forbidding hallucinated facts/dosages/diagnoses.
    - Deterministic post-generation citation verifier: validates every `[k]` tag against `1..len(hits)`, strips out-of-range tags, verifies that non-refusal answers actually cite at least one source, and performs one targeted citation-repair pass if missing.
@@ -43,7 +43,7 @@ Build and improve **ViCare**, a Vietnamese health information Q&A assistant usin
 4. **Upgraded Vietnamese Emergency Guardrails**
    - Expanded red-flag symptom lexicon (cardiac, neurological/stroke, severe bleeding, respiratory distress, anaphylaxis, acute self-harm/crisis, severe pediatric fever) with diacritic-insensitive matching and negation checks (avoiding false positives on phrases like *"không đau ngực"*).
 5. **Production Packaging & Demo**
-   - Modular `src/vicare/` package, FastAPI server (`vicare.api`), Gradio chat UI (`vicare.ui`), automated unit tests, and self-contained Colab Pro submission notebook synced with Google Drive.
+   - Modular `src/vicare/` package, FastAPI server (`vicare.api`), Gradio chat UI (`vicare.ui`), automated unit tests, and self-contained free Colab T4 submission notebook synced with Google Drive.
 
 ## Submission Checklist (2 Mandatory Steps)
 

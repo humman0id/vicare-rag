@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import time
 from typing import Any
 
@@ -16,7 +17,7 @@ def select_safe_dtype(embedding_backend: str) -> torch.dtype:
 
     EmbeddingGemma 2 activations exceed float16 dynamic range and silently produce
     NaNs or degraded vectors in float16. Always use bfloat16 on bf16-capable GPUs
-    (e.g., Colab Pro L4/A100) and float32 elsewhere (CPU, T4).
+    (e.g., L4/A100) and float32 elsewhere (free Colab T4, CPU).
     """
     if embedding_backend == "embeddinggemma2":
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -33,6 +34,7 @@ class ViCareEmbedder:
         self.dtype = select_safe_dtype(config.embedding_backend)
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
+        mem_before = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
         t0 = time.perf_counter()
         if config.embedding_backend == "embeddinggemma2":
             model_kwargs: dict[str, Any] = {"torch_dtype": self.dtype}
@@ -51,8 +53,24 @@ class ViCareEmbedder:
             self.model = SentenceTransformer(config.embedding_model, device=self.device)
 
         self.load_time_s = round(time.perf_counter() - t0, 3)
+        self.model_vram_mb = (
+            round(max(0, torch.cuda.memory_allocated() - mem_before) / (1024 * 1024), 1)
+            if torch.cuda.is_available()
+            else None
+        )
         self.param_count = sum(p.numel() for p in self.model.parameters())
         self.embedding_dim = len(self.embed_query("kiểm tra"))
+
+    def unload(self) -> None:
+        """Release GPU VRAM cleanly between sequential model benchmarks (critical on T4)."""
+        if hasattr(self, "model") and self.model is not None:
+            try:
+                self.model.to("cpu")
+            except Exception:
+                pass
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def embed_passages(
         self,
@@ -123,5 +141,6 @@ class ViCareEmbedder:
             "embedding_dim": self.embedding_dim,
             "truncate_dim": self.config.truncate_dim,
             "load_time_s": self.load_time_s,
+            "model_vram_mb": self.model_vram_mb,
             "cuda_allocated_mb": vram_mb,
         }

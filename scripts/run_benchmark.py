@@ -64,6 +64,7 @@ def run_profile(
             rag, dev, n_judge=effective_config.n_judge
         )
 
+    embedder.unload()
     return report
 
 
