@@ -27,8 +27,8 @@ class ViCareConfig:
     # Hybrid retrieval (BM25 + Dense RRF)
     use_hybrid_bm25: bool = False
     rrf_k: int = 60
-    dense_weight: float = 0.65
-    bm25_weight: float = 0.35
+    dense_weight: float = 0.75
+    bm25_weight: float = 0.25
     # EmbeddingGemma 2 specific controls
     query_prompt_name: str = "QuestionAnswering"
     document_prompt_name: str = "Document"
@@ -75,8 +75,8 @@ EMBEDDINGGEMMA2_CONFIG = ViCareConfig(
     llm_model="qwen2.5:3b",
     use_hybrid_bm25=True,
     rrf_k=60,
-    dense_weight=0.65,
-    bm25_weight=0.35,
+    dense_weight=0.75,
+    bm25_weight=0.25,
     query_prompt_name="QuestionAnswering",
     document_prompt_name="Document",
     truncate_dim=None,

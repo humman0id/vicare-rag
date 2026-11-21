@@ -33,6 +33,21 @@ def test_emergency_detection_diacritics_and_negation():
     assert not is_em_neg
     assert cats_neg == []
 
+    # Conjoined negation ("chưa từng bị ngất hay co giật") does not trigger false alarm
+    is_em_conj, cats_conj = detect_emergency(
+        "Em bị đau đầu nhẹ do thiếu ngủ, chưa từng bị ngất hay co giật, nên nghỉ ngơi thế nào?",
+        upgraded=True,
+    )
+    assert not is_em_conj
+    assert cats_conj == []
+
+    # Contrastive emergency ("không đau ngực nhưng bị khó thở") MUST still trigger
+    is_em_contrast, cats_contrast = detect_emergency(
+        "Tôi không đau ngực nhưng bị khó thở nhiều.", upgraded=True
+    )
+    assert is_em_contrast
+    assert "cardiac_respiratory" in cats_contrast
+
     # Crisis triggers emergency + crisis addendum
     formatted = format_answer(REFUSAL, "Tôi cảm thấy tuyệt vọng và muốn tự tử", upgraded_guardrails=True)
     assert formatted.startswith(EMERGENCY)

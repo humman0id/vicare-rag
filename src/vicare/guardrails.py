@@ -80,9 +80,16 @@ UPGRADED_EMERGENCY_PATTERNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Negation markers immediately preceding a symptom (e.g., "không đau ngực", "chưa bị ngất").
-_NEGATION_RE = re.compile(
-    r"(?:^|[\s,.;:!?])(?:khong|chua|chua tung|khong co|khong bi|chua bi)\s+$"
+# Negation markers directly preceding a symptom (e.g., "không đau ngực", "chưa từng bị ngất").
+_NEGATION_CORE = r"(?:khong|chua|chua tung|khong co|khong bi|chua bi|chua tung bi)"
+_DIRECT_NEGATION_RE = re.compile(rf"(?:^|[\s,.;:!?]){_NEGATION_CORE}\s+$")
+# Conjoined negation within the same clause (e.g., "chưa từng bị ngất hay co giật",
+# "không đau ngực hoặc khó thở"), stopping at sentence breaks or contrast words.
+_CLAUSE_BREAK_RE = re.compile(
+    r"[.!?;:]|\b(?:nhung|tuy nhien|nhung ma|chi bi|lai bi|dot ngot)\b"
+)
+_CONJOINED_NEGATION_RE = re.compile(
+    rf"(?:^|[\s,]){_NEGATION_CORE}\s+(?:[\w]+\s+){{1,6}}(?:hay|hoac|va|,)\s*$"
 )
 
 # Matches bracketed citations such as [1], [2], [1, 2], [1,3].
@@ -142,8 +149,10 @@ def detect_emergency(
             norm_p = strip_vietnamese_diacritics(phrase)
             pattern = re.compile(rf"(?<!\w){re.escape(norm_p)}(?!\w)")
             for match in pattern.finditer(norm_q):
-                prefix = norm_q[max(0, match.start() - 25) : match.start()]
-                if _NEGATION_RE.search(prefix):
+                prefix = norm_q[max(0, match.start() - 60) : match.start()]
+                # Restrict conjoined negation to the current clause (stop at ".", "nhưng", etc.)
+                clause = _CLAUSE_BREAK_RE.split(prefix)[-1]
+                if _DIRECT_NEGATION_RE.search(clause) or _CONJOINED_NEGATION_RE.search(clause):
                     continue
                 if category not in matched_categories:
                     matched_categories.append(category)
